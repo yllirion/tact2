@@ -1,0 +1,160 @@
+import React from 'react';
+import { HexCell, Unit, HexCoord, TERRAIN_COLORS } from '../game/types';
+import { hexToPixel, hexKey } from '../game/hexUtils';
+
+interface HexGridProps {
+  cells: Map<string, HexCell>;
+  units: Unit[];
+  selectedUnit: Unit | null;
+  reachableHexes: HexCoord[];
+  attackableHexes: HexCoord[];
+  onHexClick: (coord: HexCoord) => void;
+  hexSize: number;
+}
+
+function getHexPoints(size: number): string {
+  const points: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 180) * (60 * i - 30);
+    const x = size * Math.cos(angle);
+    const y = size * Math.sin(angle);
+    points.push(`${x},${y}`);
+  }
+  return points.join(' ');
+}
+
+function getTerrainEmoji(terrain: string): string {
+  switch (terrain) {
+    case 'forest': return '🌲';
+    case 'mountain': return '⛰️';
+    case 'water': return '🌊';
+    default: return '';
+  }
+}
+
+const HexGrid: React.FC<HexGridProps> = ({
+  cells,
+  units,
+  selectedUnit,
+  reachableHexes,
+  attackableHexes,
+  onHexClick,
+  hexSize,
+}) => {
+  const hexPoints = getHexPoints(hexSize);
+
+  // Calculate bounds for SVG viewBox
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [, cell] of cells) {
+    const { x, y } = hexToPixel(cell.coord, hexSize);
+    minX = Math.min(minX, x - hexSize);
+    maxX = Math.max(maxX, x + hexSize);
+    minY = Math.min(minY, y - hexSize);
+    maxY = Math.max(maxY, y + hexSize);
+  }
+
+  const padding = hexSize;
+  const viewBox = `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`;
+
+  return (
+    <svg
+      viewBox={viewBox}
+      className="w-full h-full max-h-[70vh]"
+      style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))' }}
+    >
+      {Array.from(cells.values()).map((cell) => {
+        const { x, y } = hexToPixel(cell.coord, hexSize);
+        const key = hexKey(cell.coord);
+        const isSelected = selectedUnit && selectedUnit.position.q === cell.coord.q && selectedUnit.position.r === cell.coord.r;
+        const isReachable = reachableHexes.some((h) => h.q === cell.coord.q && h.r === cell.coord.r);
+        const isAttackable = attackableHexes.some((h) => h.q === cell.coord.q && h.r === cell.coord.r);
+        const unitOnCell = units.find(
+          (u) => u.position.q === cell.coord.q && u.position.r === cell.coord.r && u.hp > 0
+        );
+
+        let fillColor = TERRAIN_COLORS[cell.terrain];
+        let strokeColor = '#555';
+        let strokeWidth = 1;
+
+        if (isSelected) {
+          strokeColor = '#ffd700';
+          strokeWidth = 3;
+        } else if (isAttackable) {
+          strokeColor = '#ff4444';
+          strokeWidth = 3;
+          fillColor = cell.terrain === 'water' ? '#4a60d9' : '#ff6b6b';
+        } else if (isReachable) {
+          strokeColor = '#44ff44';
+          strokeWidth = 2;
+          fillColor = cell.terrain === 'water' ? '#4ab0d9' : '#90d070';
+        }
+
+        return (
+          <g
+            key={key}
+            transform={`translate(${x}, ${y})`}
+            onClick={() => onHexClick(cell.coord)}
+            className="cursor-pointer"
+          >
+            <polygon
+              points={hexPoints}
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+              className="transition-all duration-150 hover:opacity-80"
+            />
+            {/* Terrain decoration */}
+            {(cell.terrain === 'forest' || cell.terrain === 'mountain' || cell.terrain === 'water') && !unitOnCell && (
+              <text
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={hexSize * 0.5}
+                className="pointer-events-none select-none"
+              >
+                {getTerrainEmoji(cell.terrain)}
+              </text>
+            )}
+            {/* Unit */}
+            {unitOnCell && (
+              <>
+                <circle
+                  r={hexSize * 0.55}
+                  fill={unitOnCell.team === 'player' ? 'rgba(59, 130, 246, 0.7)' : 'rgba(239, 68, 68, 0.7)'}
+                  stroke={unitOnCell.team === 'player' ? '#1d4ed8' : '#991b1b'}
+                  strokeWidth={2}
+                />
+                <text
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={hexSize * 0.5}
+                  className="pointer-events-none select-none"
+                >
+                  {unitOnCell.emoji}
+                </text>
+                {/* HP bar */}
+                <rect
+                  x={-hexSize * 0.45}
+                  y={hexSize * 0.35}
+                  width={hexSize * 0.9}
+                  height={hexSize * 0.12}
+                  fill="#333"
+                  rx={2}
+                />
+                <rect
+                  x={-hexSize * 0.45}
+                  y={hexSize * 0.35}
+                  width={hexSize * 0.9 * (unitOnCell.hp / unitOnCell.maxHp)}
+                  height={hexSize * 0.12}
+                  fill={unitOnCell.hp / unitOnCell.maxHp > 0.5 ? '#22c55e' : unitOnCell.hp / unitOnCell.maxHp > 0.25 ? '#eab308' : '#ef4444'}
+                  rx={2}
+                />
+              </>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+export default HexGrid;
