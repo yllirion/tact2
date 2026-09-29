@@ -1,9 +1,10 @@
 import React from 'react';
-import { Unit } from '../game/types';
+import { Unit, Spell } from '../game/types';
 
 interface UnitPanelProps {
   units: Unit[];
   selectedUnit: Unit | null;
+  selectedSpell: Spell | null;
   turn: 'player' | 'enemy';
   turnNumber: number;
   message: string;
@@ -12,11 +13,14 @@ interface UnitPanelProps {
   onEndTurn: () => void;
   onRestart: () => void;
   onDeselect: () => void;
+  onCastSpell: (spellId: string) => void;
+  onCancelSpell: () => void;
 }
 
 const UnitPanel: React.FC<UnitPanelProps> = ({
   units,
   selectedUnit,
+  selectedSpell,
   turn,
   turnNumber,
   message,
@@ -25,6 +29,8 @@ const UnitPanel: React.FC<UnitPanelProps> = ({
   onEndTurn,
   onRestart,
   onDeselect,
+  onCastSpell,
+  onCancelSpell,
 }) => {
   const playerUnits = units.filter((u) => u.team === 'player');
   const enemyUnits = units.filter((u) => u.team === 'enemy');
@@ -54,7 +60,9 @@ const UnitPanel: React.FC<UnitPanelProps> = ({
             <span className="text-2xl">{selectedUnit.emoji}</span>
             <div>
               <div className="font-bold text-white">{selectedUnit.name}</div>
-              <div className="text-xs text-gray-400 capitalize">{selectedUnit.type}</div>
+              <div className="text-xs text-gray-400 capitalize">
+                {selectedUnit.type === 'warrior' ? 'Воин' : selectedUnit.type === 'archer' ? 'Лучник' : 'Маг'}
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-1 text-xs text-gray-300">
@@ -64,7 +72,66 @@ const UnitPanel: React.FC<UnitPanelProps> = ({
             <div>
               {selectedUnit.moved ? '✅ Ходил' : '❌ Не ходил'}
             </div>
+            {selectedUnit.mana !== undefined && selectedUnit.maxMana !== undefined && (
+              <>
+                <div className="col-span-2">💧 Мана: {selectedUnit.mana}/{selectedUnit.maxMana}</div>
+              </>
+            )}
           </div>
+
+          {/* Spells section for mage */}
+          {selectedUnit.type === 'mage' && selectedUnit.spells && (
+            <div className="mt-3 border-t border-gray-600 pt-2">
+              <div className="text-xs font-bold text-purple-300 mb-1">✨ Заклинания:</div>
+              <div className="flex flex-col gap-1">
+                {selectedUnit.spells.map(spell => {
+                  const canCast = spell.currentCooldown === 0 &&
+                    (selectedUnit.mana ?? 0) >= spell.manaCost &&
+                    !selectedUnit.attacked;
+                  const isSelected = selectedSpell?.id === spell.id;
+
+                  return (
+                    <button
+                      key={spell.id}
+                      onClick={() => canCast && !isSelected ? onCastSpell(spell.id) : undefined}
+                      disabled={!canCast || isSelected}
+                      className={`text-left p-2 rounded text-xs transition-all ${
+                        isSelected
+                          ? 'bg-purple-600 text-white ring-2 ring-purple-300'
+                          : canCast
+                          ? 'bg-gray-600 hover:bg-gray-500 text-white cursor-pointer'
+                          : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold">
+                          {spell.emoji} {spell.name}
+                        </span>
+                        <span className="text-[10px]">
+                          💧{spell.manaCost}
+                          {spell.currentCooldown > 0 && (
+                            <span className="ml-1 text-yellow-400">⏳{spell.currentCooldown}</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        {spell.description}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedSpell && (
+                <button
+                  onClick={onCancelSpell}
+                  className="mt-2 w-full bg-gray-600 hover:bg-gray-500 text-white py-1 px-3 rounded text-xs"
+                >
+                  ❌ Отменить заклинание
+                </button>
+              )}
+            </div>
+          )}
+
           <button
             onClick={onDeselect}
             className="mt-2 w-full bg-gray-600 hover:bg-gray-500 text-white py-1 px-3 rounded text-sm"
@@ -80,14 +147,20 @@ const UnitPanel: React.FC<UnitPanelProps> = ({
         {playerUnits.map((u) => (
           <div key={u.id} className={`flex justify-between text-xs py-0.5 ${u.hp <= 0 ? 'text-gray-600 line-through' : 'text-gray-300'}`}>
             <span>{u.emoji} {u.name}</span>
-            <span>❤️ {u.hp}/{u.maxHp}</span>
+            <span>
+              ❤️ {u.hp}/{u.maxHp}
+              {u.mana !== undefined && <span className="ml-1 text-blue-400">💧{u.mana}</span>}
+            </span>
           </div>
         ))}
         <div className="text-sm font-bold text-red-400 mt-2 mb-1">⚔️ Враги:</div>
         {enemyUnits.map((u) => (
           <div key={u.id} className={`flex justify-between text-xs py-0.5 ${u.hp <= 0 ? 'text-gray-600 line-through' : 'text-gray-300'}`}>
             <span>{u.emoji} {u.name}</span>
-            <span>❤️ {u.hp}/{u.maxHp}</span>
+            <span>
+              ❤️ {u.hp}/{u.maxHp}
+              {u.mana !== undefined && <span className="ml-1 text-blue-400">💧{u.mana}</span>}
+            </span>
           </div>
         ))}
       </div>
@@ -118,9 +191,13 @@ const UnitPanel: React.FC<UnitPanelProps> = ({
         <div>🟢 Зелёная рамка — доступные клетки</div>
         <div>🔴 Красная рамка — цели для атаки</div>
         <div>🟡 Жёлтая рамка — выбранный юнит</div>
-        <div className="mt-1">⚔️ Воин: ближний бой</div>
-        <div>🏹 Лучник: дальность 3</div>
-        <div>🔮 Маг: дальность 2, сильный урон</div>
+        <div>🟣 Фиолетовая — цель Молнии</div>
+        <div>🟠 Оранжевая — цель Огн. шара</div>
+        <div className="mt-1">⚔️ Воин: ближний бой, 12 HP</div>
+        <div>🏹 Лучник: дальность 3, 8 HP</div>
+        <div>🔮 Маг: заклинания, 7 HP, 10 маны</div>
+        <div className="mt-1">⚡ Молния: 7 урона, 5 дальн., 3 маны</div>
+        <div>🔥 Огн. шар: 5 урона AoE, 4 дальн., 5 маны</div>
       </div>
     </div>
   );

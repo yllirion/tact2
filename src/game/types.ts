@@ -3,6 +3,19 @@ export interface HexCoord {
   r: number;
 }
 
+export interface Spell {
+  id: string;
+  name: string;
+  emoji: string;
+  manaCost: number;
+  damage: number;
+  range: number;
+  cooldown: number;
+  currentCooldown: number;
+  aoe: number; // 0 = single target, 1+ = radius
+  description: string;
+}
+
 export interface Unit {
   id: string;
   name: string;
@@ -16,6 +29,9 @@ export interface Unit {
   attacked: boolean;
   type: 'warrior' | 'archer' | 'mage';
   emoji: string;
+  mana?: number;
+  maxMana?: number;
+  spells?: Spell[];
 }
 
 export interface HexCell {
@@ -29,13 +45,16 @@ export interface GameState {
   units: Unit[];
   selectedUnit: Unit | null;
   turn: 'player' | 'enemy';
-  phase: 'select' | 'move' | 'attack';
+  phase: 'select' | 'move' | 'attack' | 'spell';
   turnNumber: number;
   gameOver: boolean;
   winner: 'player' | 'enemy' | null;
   message: string;
   reachableHexes: HexCoord[];
   attackableHexes: HexCoord[];
+  selectedSpell: Spell | null;
+  spellTargets: HexCoord[];
+  lastSpellEffect: { hexes: HexCoord[]; type: 'lightning' | 'fireball'; timestamp: number } | null;
 }
 
 export const TERRAIN_COLORS: Record<string, string> = {

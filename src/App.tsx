@@ -9,6 +9,9 @@ import {
   attackUnit,
   endTurn,
   executeEnemyTurn,
+  selectSpell,
+  castSpell,
+  cancelSpellSelection,
 } from './game/gameLogic';
 
 const HEX_SIZE = 32;
@@ -24,6 +27,19 @@ function App() {
       const unitOnCell = gameState.units.find(
         (u) => u.position.q === coord.q && u.position.r === coord.r && u.hp > 0
       );
+
+      // If in spell targeting mode
+      if (gameState.phase === 'spell' && gameState.selectedSpell) {
+        const isSpellTarget = gameState.spellTargets.some(
+          (h) => h.q === coord.q && h.r === coord.r
+        );
+        if (isSpellTarget) {
+          setGameState((prev) => castSpell(prev, coord));
+          return;
+        }
+        // Clicking elsewhere cancels spell
+        return;
+      }
 
       // If clicking on own unit, select it
       if (unitOnCell && unitOnCell.team === 'player') {
@@ -64,11 +80,21 @@ function App() {
     setGameState((prev) => ({
       ...prev,
       selectedUnit: null,
+      selectedSpell: null,
+      spellTargets: [],
       phase: 'select',
       reachableHexes: [],
       attackableHexes: [],
       message: 'Выберите юнита для действия.',
     }));
+  }, []);
+
+  const handleCastSpell = useCallback((spellId: string) => {
+    setGameState((prev) => selectSpell(prev, spellId));
+  }, []);
+
+  const handleCancelSpell = useCallback(() => {
+    setGameState((prev) => cancelSpellSelection(prev));
   }, []);
 
   // Execute enemy turn with delay
@@ -84,6 +110,22 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [gameState.turn, gameState.gameOver, isEnemyTurn]);
+
+  // Force re-render for spell effects
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (gameState.lastSpellEffect) {
+      const interval = setInterval(() => setTick(t => t + 1), 100);
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        setGameState(prev => ({ ...prev, lastSpellEffect: null }));
+      }, 900);
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      };
+    }
+  }, [gameState.lastSpellEffect?.timestamp]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col items-center p-4">
@@ -105,6 +147,9 @@ function App() {
             selectedUnit={gameState.selectedUnit}
             reachableHexes={gameState.reachableHexes}
             attackableHexes={gameState.attackableHexes}
+            spellTargets={gameState.spellTargets}
+            selectedSpell={gameState.selectedSpell}
+            lastSpellEffect={gameState.lastSpellEffect}
             onHexClick={handleHexClick}
             hexSize={HEX_SIZE}
           />
@@ -115,6 +160,7 @@ function App() {
           <UnitPanel
             units={gameState.units}
             selectedUnit={gameState.selectedUnit}
+            selectedSpell={gameState.selectedSpell}
             turn={gameState.turn}
             turnNumber={gameState.turnNumber}
             message={gameState.message}
@@ -123,6 +169,8 @@ function App() {
             onEndTurn={handleEndTurn}
             onRestart={handleRestart}
             onDeselect={handleDeselect}
+            onCastSpell={handleCastSpell}
+            onCancelSpell={handleCancelSpell}
           />
         </div>
       </div>

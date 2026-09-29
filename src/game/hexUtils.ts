@@ -120,3 +120,36 @@ export function generateHexGrid(radius: number): HexCoord[] {
   }
   return results;
 }
+
+// Get all hexes within a given radius (for AoE)
+export function getHexesInRadius(center: HexCoord, radius: number): HexCoord[] {
+  const results: HexCoord[] = [];
+  for (let q = -radius; q <= radius; q++) {
+    const r1 = Math.max(-radius, -q - radius);
+    const r2 = Math.min(radius, -q + radius);
+    for (let r = r1; r <= r2; r++) {
+      results.push({ q: center.q + q, r: center.r + r });
+    }
+  }
+  return results;
+}
+
+// Get spell target hexes (within range of caster)
+export function getSpellTargets(
+  caster: { position: HexCoord; range: number },
+  grid: Map<string, any>,
+  units: any[]
+): HexCoord[] {
+  const results: HexCoord[] = [];
+  const allHexes = Array.from(grid.keys());
+  
+  for (const key of allHexes) {
+    const coord = parseHexKey(key);
+    const dist = hexDistance(caster.position, coord);
+    if (dist > 0 && dist <= caster.range) {
+      results.push(coord);
+    }
+  }
+  
+  return results;
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { HexCell, Unit, HexCoord, TERRAIN_COLORS } from '../game/types';
+import { HexCell, Unit, HexCoord, TERRAIN_COLORS, Spell } from '../game/types';
 import { hexToPixel, hexKey } from '../game/hexUtils';
 
 interface HexGridProps {
@@ -8,6 +8,9 @@ interface HexGridProps {
   selectedUnit: Unit | null;
   reachableHexes: HexCoord[];
   attackableHexes: HexCoord[];
+  spellTargets: HexCoord[];
+  selectedSpell: Spell | null;
+  lastSpellEffect: { hexes: HexCoord[]; type: 'lightning' | 'fireball'; timestamp: number } | null;
   onHexClick: (coord: HexCoord) => void;
   hexSize: number;
 }
@@ -38,6 +41,9 @@ const HexGrid: React.FC<HexGridProps> = ({
   selectedUnit,
   reachableHexes,
   attackableHexes,
+  spellTargets,
+  selectedSpell,
+  lastSpellEffect,
   onHexClick,
   hexSize,
 }) => {
@@ -56,6 +62,9 @@ const HexGrid: React.FC<HexGridProps> = ({
   const padding = hexSize;
   const viewBox = `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`;
 
+  // Check if spell effect is still showing (within 800ms)
+  const showEffect = lastSpellEffect && (Date.now() - lastSpellEffect.timestamp < 800);
+
   return (
     <svg
       viewBox={viewBox}
@@ -68,6 +77,8 @@ const HexGrid: React.FC<HexGridProps> = ({
         const isSelected = selectedUnit && selectedUnit.position.q === cell.coord.q && selectedUnit.position.r === cell.coord.r;
         const isReachable = reachableHexes.some((h) => h.q === cell.coord.q && h.r === cell.coord.r);
         const isAttackable = attackableHexes.some((h) => h.q === cell.coord.q && h.r === cell.coord.r);
+        const isSpellTarget = spellTargets.some((h) => h.q === cell.coord.q && h.r === cell.coord.r);
+        const isInEffect = showEffect && lastSpellEffect!.hexes.some(h => h.q === cell.coord.q && h.r === cell.coord.r);
         const unitOnCell = units.find(
           (u) => u.position.q === cell.coord.q && u.position.r === cell.coord.r && u.hp > 0
         );
@@ -76,9 +87,29 @@ const HexGrid: React.FC<HexGridProps> = ({
         let strokeColor = '#555';
         let strokeWidth = 1;
 
-        if (isSelected) {
+        if (isInEffect) {
+          if (lastSpellEffect!.type === 'lightning') {
+            fillColor = '#fef08a';
+            strokeColor = '#facc15';
+            strokeWidth = 3;
+          } else {
+            fillColor = '#f97316';
+            strokeColor = '#dc2626';
+            strokeWidth = 3;
+          }
+        } else if (isSelected) {
           strokeColor = '#ffd700';
           strokeWidth = 3;
+        } else if (isSpellTarget) {
+          if (selectedSpell?.id === 'lightning') {
+            strokeColor = '#a855f7';
+            strokeWidth = 2.5;
+            fillColor = cell.terrain === 'water' ? '#6a60d9' : '#c084fc';
+          } else {
+            strokeColor = '#f97316';
+            strokeWidth = 2.5;
+            fillColor = cell.terrain === 'water' ? '#d97a4a' : '#fb923c';
+          }
         } else if (isAttackable) {
           strokeColor = '#ff4444';
           strokeWidth = 3;
@@ -103,8 +134,32 @@ const HexGrid: React.FC<HexGridProps> = ({
               strokeWidth={strokeWidth}
               className="transition-all duration-150 hover:opacity-80"
             />
+            {/* Spell effect overlay */}
+            {isInEffect && (
+              <>
+                {lastSpellEffect!.type === 'lightning' ? (
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={hexSize * 0.8}
+                    className="pointer-events-none select-none animate-pulse"
+                  >
+                    ⚡
+                  </text>
+                ) : (
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={hexSize * 0.8}
+                    className="pointer-events-none select-none animate-pulse"
+                  >
+                    💥
+                  </text>
+                )}
+              </>
+            )}
             {/* Terrain decoration */}
-            {(cell.terrain === 'forest' || cell.terrain === 'mountain' || cell.terrain === 'water') && !unitOnCell && (
+            {!isInEffect && (cell.terrain === 'forest' || cell.terrain === 'mountain' || cell.terrain === 'water') && !unitOnCell && (
               <text
                 textAnchor="middle"
                 dominantBaseline="central"
@@ -115,7 +170,7 @@ const HexGrid: React.FC<HexGridProps> = ({
               </text>
             )}
             {/* Unit */}
-            {unitOnCell && (
+            {unitOnCell && !isInEffect && (
               <>
                 <circle
                   r={hexSize * 0.55}
@@ -148,6 +203,27 @@ const HexGrid: React.FC<HexGridProps> = ({
                   fill={unitOnCell.hp / unitOnCell.maxHp > 0.5 ? '#22c55e' : unitOnCell.hp / unitOnCell.maxHp > 0.25 ? '#eab308' : '#ef4444'}
                   rx={2}
                 />
+                {/* Mana bar for mages */}
+                {unitOnCell.mana !== undefined && unitOnCell.maxMana !== undefined && (
+                  <>
+                    <rect
+                      x={-hexSize * 0.45}
+                      y={hexSize * 0.5}
+                      width={hexSize * 0.9}
+                      height={hexSize * 0.08}
+                      fill="#333"
+                      rx={2}
+                    />
+                    <rect
+                      x={-hexSize * 0.45}
+                      y={hexSize * 0.5}
+                      width={hexSize * 0.9 * (unitOnCell.mana / unitOnCell.maxMana)}
+                      height={hexSize * 0.08}
+                      fill="#3b82f6"
+                      rx={2}
+                    />
+                  </>
+                )}
               </>
             )}
           </g>
