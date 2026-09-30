@@ -1,14 +1,23 @@
-import { HexCoord } from './types';
+import { HexCoord, TERRAIN_MOVE_COST } from './types';
 
-// Axial coordinates hex utilities
-export const HEX_DIRECTIONS: HexCoord[] = [
-  { q: 1, r: 0 },
-  { q: 1, r: -1 },
-  { q: 0, r: -1 },
-  { q: -1, r: 0 },
-  { q: -1, r: 1 },
-  { q: 0, r: 1 },
-];
+// Map dimensions: 17 rows, odd rows have 17 hexes, even rows have 15 hexes
+export const MAP_ROWS = 17;
+export const MAP_COLS_ODD = 17; // нечётные ряды (r=1,3,5...)
+export const MAP_COLS_EVEN = 15; // чётные ряды (r=0,2,4...)
+
+// Even-r offset: чётные ряды (r=0,2,4...) смещены вправо на полгекса
+// Нечётные ряды (r=1,3,5...) — полные (17 гексов)
+// Чётные ряды (r=0,2,4...) — укороченные (15 гексов), смещены
+
+export function getRowLength(r: number): number {
+  return r % 2 === 0 ? MAP_COLS_EVEN : MAP_COLS_ODD;
+}
+
+export function isValidHex(q: number, r: number): boolean {
+  if (r < 0 || r >= MAP_ROWS) return false;
+  const rowLen = getRowLength(r);
+  return q >= 0 && q < rowLen;
+}
 
 export function hexKey(coord: HexCoord): string {
   return `${coord.q},${coord.r}`;
@@ -19,30 +28,67 @@ export function parseHexKey(key: string): HexCoord {
   return { q, r };
 }
 
+// Even-r offset neighbors
+// Чётные ряды смещены вправо
+const EVEN_R_DIRECTION_EVEN = [
+  { dq: -1, dr: -1 }, { dq: 0, dr: -1 },  // верх
+  { dq: -1, dr: 0 },  { dq: 1, dr: 0 },    // лево/право
+  { dq: -1, dr: 1 },  { dq: 0, dr: 1 },    // низ
+];
+
+const EVEN_R_DIRECTION_ODD = [
+  { dq: 0, dr: -1 },  { dq: 1, dr: -1 },   // верх
+  { dq: -1, dr: 0 },  { dq: 1, dr: 0 },    // лево/право
+  { dq: 0, dr: 1 },   { dq: 1, dr: 1 },    // низ
+];
+
+export function hexNeighbors(coord: HexCoord): HexCoord[] {
+  const dirs = coord.r % 2 === 0 ? EVEN_R_DIRECTION_EVEN : EVEN_R_DIRECTION_ODD;
+  return dirs
+    .map(d => ({ q: coord.q + d.dq, r: coord.r + d.dr }))
+    .filter(h => isValidHex(h.q, h.r));
+}
+
+// Convert even-r offset to cube coordinates for distance calculation
+function offsetToCube(coord: HexCoord): { x: number; y: number; z: number } {
+  const x = coord.q - Math.floor(coord.r / 2);
+  const z = coord.r;
+  const y = -x - z;
+  return { x, y, z };
+}
+
 export function hexDistance(a: HexCoord, b: HexCoord): number {
-  return (
-    (Math.abs(a.q - b.q) +
-      Math.abs(a.q + a.r - b.q - b.r) +
-      Math.abs(a.r - b.r)) /
-    2
+  const ac = offsetToCube(a);
+  const bc = offsetToCube(b);
+  return Math.max(
+    Math.abs(ac.x - bc.x),
+    Math.abs(ac.y - bc.y),
+    Math.abs(ac.z - bc.z)
   );
 }
 
-export function hexNeighbors(coord: HexCoord): HexCoord[] {
-  return HEX_DIRECTIONS.map((d) => ({
-    q: coord.q + d.q,
-    r: coord.r + d.r,
-  }));
-}
-
-// Convert axial to pixel (pointy-top hexagons)
+// Convert even-r offset to pixel (pointy-top hexagons)
 export function hexToPixel(coord: HexCoord, size: number): { x: number; y: number } {
-  const x = size * (Math.sqrt(3) * coord.q + (Math.sqrt(3) / 2) * coord.r);
-  const y = size * ((3 / 2) * coord.r);
+  // Чётные ряды смещены вправо на половину ширины гекса
+  const xOffset = coord.r % 2 === 0 ? 0.5 : 0;
+  const x = size * Math.sqrt(3) * (coord.q + xOffset);
+  const y = size * 1.5 * coord.r;
   return { x, y };
 }
 
-// Get reachable hexes using BFS
+// Get all hexes on the map
+export function getAllHexes(): HexCoord[] {
+  const results: HexCoord[] = [];
+  for (let r = 0; r < MAP_ROWS; r++) {
+    const rowLen = getRowLength(r);
+    for (let q = 0; q < rowLen; q++) {
+      results.push({ q, r });
+    }
+  }
+  return results;
+}
+
+// Get reachable hexes using BFS (for movement)
 export function getReachableHexes(
   start: HexCoord,
   moveRange: number,
@@ -63,7 +109,7 @@ export function getReachableHexes(
       const cell = grid.get(key);
       if (!cell) continue;
 
-      const terrainCost = cell.terrain === 'water' ? 99 : cell.terrain === 'mountain' ? 3 : cell.terrain === 'forest' ? 2 : 1;
+      const terrainCost = TERRAIN_MOVE_COST[cell.terrain as keyof typeof TERRAIN_MOVE_COST] ?? 99;
       const newCost = current.cost + terrainCost;
 
       if (newCost > moveRange) continue;
@@ -109,26 +155,13 @@ export function getAttackableHexes(
   return result;
 }
 
-export function generateHexGrid(radius: number): HexCoord[] {
-  const results: HexCoord[] = [];
-  for (let q = -radius; q <= radius; q++) {
-    const r1 = Math.max(-radius, -q - radius);
-    const r2 = Math.min(radius, -q + radius);
-    for (let r = r1; r <= r2; r++) {
-      results.push({ q, r });
-    }
-  }
-  return results;
-}
-
 // Get all hexes within a given radius (for AoE)
 export function getHexesInRadius(center: HexCoord, radius: number): HexCoord[] {
   const results: HexCoord[] = [];
-  for (let q = -radius; q <= radius; q++) {
-    const r1 = Math.max(-radius, -q - radius);
-    const r2 = Math.min(radius, -q + radius);
-    for (let r = r1; r <= r2; r++) {
-      results.push({ q: center.q + q, r: center.r + r });
+  const allHexes = getAllHexes();
+  for (const hex of allHexes) {
+    if (hexDistance(center, hex) <= radius) {
+      results.push(hex);
     }
   }
   return results;
@@ -138,11 +171,11 @@ export function getHexesInRadius(center: HexCoord, radius: number): HexCoord[] {
 export function getSpellTargets(
   caster: { position: HexCoord; range: number },
   grid: Map<string, any>,
-  units: any[]
+  _units: any[]
 ): HexCoord[] {
   const results: HexCoord[] = [];
   const allHexes = Array.from(grid.keys());
-  
+
   for (const key of allHexes) {
     const coord = parseHexKey(key);
     const dist = hexDistance(caster.position, coord);
@@ -150,6 +183,6 @@ export function getSpellTargets(
       results.push(coord);
     }
   }
-  
+
   return results;
 }

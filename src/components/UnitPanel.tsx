@@ -187,13 +187,25 @@ const UnitPanel: React.FC<UnitPanelProps> = ({
 
       {/* Legend */}
       <div className="bg-gray-800 p-3 rounded-lg text-xs text-gray-400">
-        <div className="font-bold text-gray-300 mb-1">Легенда:</div>
-        <div>🟢 Зелёная рамка — доступные клетки</div>
-        <div>🔴 Красная рамка — цели для атаки</div>
-        <div>🟡 Жёлтая рамка — выбранный юнит</div>
+        <div className="font-bold text-gray-300 mb-1">Рамки:</div>
+        <div>🟢 Зелёная — доступные клетки</div>
+        <div>🔴 Красная — цели для атаки</div>
+        <div>🟡 Жёлтая — выбранный юнит</div>
         <div>🟣 Фиолетовая — цель Молнии</div>
         <div>🟠 Оранжевая — цель Огн. шара</div>
-        <div className="mt-1">⚔️ Воин: ближний бой, 12 HP</div>
+
+        <div className="font-bold text-gray-300 mt-2 mb-1">Местность:</div>
+        <div>🟫 Обычная — проход, стоимость 1</div>
+        <div>🌲 Лес — стоимость 2, +1 защита</div>
+        <div>💧 Мелководье — стоимость 2</div>
+        <div>🌊 Глубоководье — непроходимо</div>
+        <div>🪨 Камни — стоимость 2, +1 защита</div>
+        <div>⛰️ Скалы — непроходимо</div>
+        <div>🔥 Огонь — непроходимо</div>
+        <div>🏠 Здания — стоимость 1, +2 защиты</div>
+
+        <div className="font-bold text-gray-300 mt-2 mb-1">Юниты:</div>
+        <div>⚔️ Воин: ближний бой, 12 HP</div>
         <div>🏹 Лучник: дальность 3, 8 HP</div>
         <div>🔮 Маг: заклинания, 7 HP, 10 маны</div>
         <div className="mt-1">⚡ Молния: 7 урона, 5 дальн., 3 маны</div>
