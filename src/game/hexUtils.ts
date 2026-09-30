@@ -1,13 +1,11 @@
 import { HexCoord, TERRAIN_MOVE_COST } from './types';
 
-// Map dimensions: 17 rows, odd rows have 17 hexes, even rows have 15 hexes
+// Map dimensions: 17 rows
+// Чётные ряды (r=0,2,4...) — полные, 17 гексов
+// Нечётные ряды (r=1,3,5...) — укороченные, 16 гексов (смещены вправо)
 export const MAP_ROWS = 17;
-export const MAP_COLS_ODD = 17; // нечётные ряды (r=1,3,5...)
-export const MAP_COLS_EVEN = 15; // чётные ряды (r=0,2,4...)
-
-// Even-r offset: чётные ряды (r=0,2,4...) смещены вправо на полгекса
-// Нечётные ряды (r=1,3,5...) — полные (17 гексов)
-// Чётные ряды (r=0,2,4...) — укороченные (15 гексов), смещены
+export const MAP_COLS_EVEN = 17; // чётные ряды (r=0,2,4...)
+export const MAP_COLS_ODD = 16; // нечётные ряды (r=1,3,5...)
 
 export function getRowLength(r: number): number {
   return r % 2 === 0 ? MAP_COLS_EVEN : MAP_COLS_ODD;
@@ -29,7 +27,8 @@ export function parseHexKey(key: string): HexCoord {
 }
 
 // Even-r offset neighbors
-// Чётные ряды смещены вправо
+// Чётные ряды (r=0,2,4...) — полные, 17 гексов, без смещения
+// Нечётные ряды (r=1,3,5...) — укороченные, 16 гексов, смещены вправо
 const EVEN_R_DIRECTION_EVEN = [
   { dq: -1, dr: -1 }, { dq: 0, dr: -1 },  // верх
   { dq: -1, dr: 0 },  { dq: 1, dr: 0 },    // лево/право
@@ -69,8 +68,8 @@ export function hexDistance(a: HexCoord, b: HexCoord): number {
 
 // Convert even-r offset to pixel (pointy-top hexagons)
 export function hexToPixel(coord: HexCoord, size: number): { x: number; y: number } {
-  // Чётные ряды смещены вправо на половину ширины гекса
-  const xOffset = coord.r % 2 === 0 ? 0.5 : 0;
+  // Нечётные ряды (укороченные) смещены вправо на половину ширины гекса
+  const xOffset = coord.r % 2 === 0 ? 0 : 0.5;
   const x = size * Math.sqrt(3) * (coord.q + xOffset);
   const y = size * 1.5 * coord.r;
   return { x, y };
