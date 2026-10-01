@@ -1,15 +1,69 @@
-import { GameState, Unit, HexCell, HexCoord, Spell } from './types';
-import { hexKey, generateHexGrid, getReachableHexes, getAttackableHexes, hexDistance, getHexesInRadius, getSpellTargets } from './hexUtils';
+import { GameState, Unit, HexCell, HexCoord, TerrainType, TERRAIN_MOVE_COST } from './types';
+import {
+  hexKey, getAllHexes, getReachableHexes, getAttackableHexes,
+  hexDistance, getHexesInRadius, getSpellTargets, isValidHex, getRowLength
+} from './hexUtils';
 
-function generateTerrain(): 'plain' | 'forest' | 'mountain' | 'water' {
+function generateTerrain(q: number, r: number, units: Unit[]): TerrainType {
+  // Клетки рядом с юнитами — всегда обычные
+  const nearUnit = units.some(u => hexDistance({ q, r }, u.position) <= 1);
+  if (nearUnit) return 'plain';
+
   const rand = Math.random();
-  if (rand < 0.55) return 'plain';
-  if (rand < 0.78) return 'forest';
-  if (rand < 0.92) return 'mountain';
-  return 'water';
+
+  // Центральная зона — больше разнообразия
+  const isCenter = r >= 6 && r <= 10;
+
+  if (isCenter) {
+    if (rand < 0.40) return 'plain';
+    if (rand < 0.55) return 'forest';
+    if (rand < 0.65) return 'shallow';
+    if (rand < 0.72) return 'stones';
+    if (rand < 0.80) return 'buildings';
+    if (rand < 0.87) return 'fire';
+    if (rand < 0.94) return 'deep';
+    return 'cliffs';
+  }
+
+  // Крайние зоны — больше леса и камней
+  if (rand < 0.50) return 'plain';
+  if (rand < 0.68) return 'forest';
+  if (rand < 0.78) return 'stones';
+  if (rand < 0.85) return 'shallow';
+  if (rand < 0.90) return 'buildings';
+  if (rand < 0.94) return 'fire';
+  if (rand < 0.97) return 'deep';
+  return 'cliffs';
 }
 
-function createLightningSpell(): Spell {
+function createInitialUnits(): Unit[] {
+  // Игрок слева (нечётные ряды имеют 17 гексов, чётные — 15)
+  // Разместим в левой части карты
+  return [
+    // Player units (слева)
+    { id: 'p1', name: 'Воин', team: 'player', hp: 12, maxHp: 12, attack: 4, moveRange: 3, position: { q: 1, r: 7 }, moved: false, attacked: false, type: 'warrior', emoji: '⚔️' },
+    { id: 'p2', name: 'Лучник', team: 'player', hp: 8, maxHp: 8, attack: 3, moveRange: 3, position: { q: 0, r: 8 }, moved: false, attacked: false, type: 'archer', emoji: '🏹' },
+    {
+      id: 'p3', name: 'Маг', team: 'player', hp: 7, maxHp: 7, attack: 5, moveRange: 2,
+      position: { q: 1, r: 9 }, moved: false, attacked: false, type: 'mage', emoji: '🔮',
+      mana: 10, maxMana: 10,
+      spells: [createLightningSpell(), createFireballSpell()],
+    },
+    { id: 'p4', name: 'Воин 2', team: 'player', hp: 12, maxHp: 12, attack: 4, moveRange: 3, position: { q: 0, r: 6 }, moved: false, attacked: false, type: 'warrior', emoji: '⚔️' },
+    // Enemy units (справа)
+    { id: 'e1', name: 'Орк', team: 'enemy', hp: 10, maxHp: 10, attack: 4, moveRange: 3, position: { q: 15, r: 7 }, moved: false, attacked: false, type: 'warrior', emoji: '👹' },
+    { id: 'e2', name: 'Гоблин', team: 'enemy', hp: 7, maxHp: 7, attack: 3, moveRange: 4, position: { q: 16, r: 8 }, moved: false, attacked: false, type: 'archer', emoji: '👺' },
+    {
+      id: 'e3', name: 'Шаман', team: 'enemy', hp: 8, maxHp: 8, attack: 5, moveRange: 2,
+      position: { q: 15, r: 9 }, moved: false, attacked: false, type: 'mage', emoji: '🧙',
+      mana: 10, maxMana: 10,
+      spells: [createLightningSpell(), createFireballSpell()],
+    },
+    { id: 'e4', name: 'Орк 2', team: 'enemy', hp: 10, maxHp: 10, attack: 4, moveRange: 3, position: { q: 16, r: 6 }, moved: false, attacked: false, type: 'warrior', emoji: '👹' },
+  ];
+}
+
+function createLightningSpell() {
   return {
     id: 'lightning',
     name: 'Молния',
@@ -20,11 +74,11 @@ function createLightningSpell(): Spell {
     cooldown: 2,
     currentCooldown: 0,
     aoe: 0,
-    description: 'Поражает одну цель молнией. Урон: 7, Дальность: 5',
+    description: 'Поражает одну цель. Урон: 7, Дальность: 5',
   };
 }
 
-function createFireballSpell(): Spell {
+function createFireballSpell() {
   return {
     id: 'fireball',
     name: 'Огненный шар',
@@ -39,62 +93,22 @@ function createFireballSpell(): Spell {
   };
 }
 
-function createInitialUnits(): Unit[] {
-  return [
-    // Player units
-    { id: 'p1', name: 'Воин', team: 'player', hp: 12, maxHp: 12, attack: 4, moveRange: 3, position: { q: -3, r: 0 }, moved: false, attacked: false, type: 'warrior', emoji: '⚔️' },
-    { id: 'p2', name: 'Лучник', team: 'player', hp: 8, maxHp: 8, attack: 3, moveRange: 3, position: { q: -3, r: 1 }, moved: false, attacked: false, type: 'archer', emoji: '🏹' },
-    {
-      id: 'p3', name: 'Маг', team: 'player', hp: 7, maxHp: 7, attack: 5, moveRange: 2,
-      position: { q: -2, r: 0 }, moved: false, attacked: false, type: 'mage', emoji: '🔮',
-      mana: 10, maxMana: 10,
-      spells: [createLightningSpell(), createFireballSpell()],
-    },
-    { id: 'p4', name: 'Воин 2', team: 'player', hp: 12, maxHp: 12, attack: 4, moveRange: 3, position: { q: -2, r: 1 }, moved: false, attacked: false, type: 'warrior', emoji: '⚔️' },
-    // Enemy units
-    { id: 'e1', name: 'Орк', team: 'enemy', hp: 10, maxHp: 10, attack: 4, moveRange: 3, position: { q: 3, r: 0 }, moved: false, attacked: false, type: 'warrior', emoji: '👹' },
-    { id: 'e2', name: 'Гоблин', team: 'enemy', hp: 7, maxHp: 7, attack: 3, moveRange: 4, position: { q: 3, r: -1 }, moved: false, attacked: false, type: 'archer', emoji: '👺' },
-    {
-      id: 'e3', name: 'Шаман', team: 'enemy', hp: 8, maxHp: 8, attack: 5, moveRange: 2,
-      position: { q: 2, r: 0 }, moved: false, attacked: false, type: 'mage', emoji: '🧙',
-      mana: 10, maxMana: 10,
-      spells: [createLightningSpell(), createFireballSpell()],
-    },
-    { id: 'e4', name: 'Орк 2', team: 'enemy', hp: 10, maxHp: 10, attack: 4, moveRange: 3, position: { q: 2, r: 1 }, moved: false, attacked: false, type: 'warrior', emoji: '👹' },
-  ];
-}
-
 export function initializeGame(): GameState {
-  const hexCoords = generateHexGrid(4);
-  const grid = new Map<string, HexCell>();
   const units = createInitialUnits();
+  const grid = new Map<string, HexCell>();
+  const allHexes = getAllHexes();
 
-  for (const coord of hexCoords) {
+  for (const coord of allHexes) {
     const key = hexKey(coord);
     const unitOnCell = units.find((u) => u.position.q === coord.q && u.position.r === coord.r);
-    
-    let terrain: 'plain' | 'forest' | 'mountain' | 'water';
-    const distToAnyUnit = units.some(u => hexDistance(coord, u.position) <= 1);
-    if (distToAnyUnit) {
-      terrain = 'plain';
-    } else {
-      terrain = generateTerrain();
-    }
+
+    const terrain = unitOnCell ? 'plain' : generateTerrain(coord.q, coord.r, units);
 
     grid.set(key, {
       coord,
       terrain,
       unit: unitOnCell,
     });
-  }
-
-  for (const unit of units) {
-    const key = hexKey(unit.position);
-    const cell = grid.get(key);
-    if (cell) {
-      cell.terrain = 'plain';
-      cell.unit = unit;
-    }
   }
 
   return {
@@ -187,7 +201,12 @@ export function attackUnit(state: GameState, target: HexCoord): GameState {
   );
   if (!targetUnit) return state;
 
-  const damage = Math.max(1, attacker.attack + Math.floor(Math.random() * 3) - 1);
+  // Бонус защиты от местности
+  const targetCell = state.grid.get(hexKey(target));
+  const defenseBonus = targetCell ? (targetCell.terrain === 'buildings' ? 2 : targetCell.terrain === 'forest' || targetCell.terrain === 'stones' ? 1 : 0) : 0;
+
+  const rawDamage = Math.max(1, attacker.attack + Math.floor(Math.random() * 3) - 1);
+  const damage = Math.max(1, rawDamage - defenseBonus);
   const newHp = Math.max(0, targetUnit.hp - damage);
   const updatedTarget = { ...targetUnit, hp: newHp };
 
@@ -199,9 +218,9 @@ export function attackUnit(state: GameState, target: HexCoord): GameState {
 
   const newGrid = new Map(state.grid);
   const targetKey = hexKey(target);
-  const targetCell = newGrid.get(targetKey);
-  if (targetCell) {
-    newGrid.set(targetKey, { ...targetCell, unit: newHp > 0 ? updatedTarget : undefined });
+  const targetCellRef = newGrid.get(targetKey);
+  if (targetCellRef) {
+    newGrid.set(targetKey, { ...targetCellRef, unit: newHp > 0 ? updatedTarget : undefined });
   }
 
   const playerAlive = units.filter((u) => u.team === 'player' && u.hp > 0);
@@ -210,6 +229,7 @@ export function attackUnit(state: GameState, target: HexCoord): GameState {
   let gameOver = false;
   let winner: 'player' | 'enemy' | null = null;
   let message = `${attacker.name} нанёс ${damage} урона!`;
+  if (defenseBonus > 0) message += ` (−${defenseBonus} защита местности)`;
 
   if (enemyAlive.length === 0) {
     gameOver = true;
@@ -239,7 +259,6 @@ export function attackUnit(state: GameState, target: HexCoord): GameState {
   };
 }
 
-// Select a spell to cast
 export function selectSpell(state: GameState, spellId: string): GameState {
   if (!state.selectedUnit || state.selectedUnit.type !== 'mage') return state;
   if (state.selectedUnit.attacked) return { ...state, message: 'Этот юнит уже действовал.' };
@@ -272,7 +291,6 @@ export function selectSpell(state: GameState, spellId: string): GameState {
   };
 }
 
-// Cast spell on target hex
 export function castSpell(state: GameState, target: HexCoord): GameState {
   if (!state.selectedUnit || !state.selectedSpell) return state;
 
@@ -284,35 +302,31 @@ export function castSpell(state: GameState, target: HexCoord): GameState {
   const caster = { ...state.selectedUnit };
   const spell = state.selectedSpell;
 
-  // Deduct mana and set cooldown
   caster.mana = (caster.mana ?? 0) - spell.manaCost;
   caster.attacked = true;
   caster.moved = true;
 
-  // Update spell cooldown
   const updatedSpells = caster.spells?.map(s =>
     s.id === spell.id ? { ...s, currentCooldown: s.cooldown } : s
   );
   caster.spells = updatedSpells;
 
-  // Calculate affected hexes
   const affectedHexes = spell.aoe > 0
     ? getHexesInRadius(target, spell.aoe)
     : [target];
 
-  // Apply damage to all units in affected area
   let units = [...state.units];
   const newGrid = new Map(state.grid);
   let totalDamage = 0;
   let killedNames: string[] = [];
 
   for (const hex of affectedHexes) {
+    if (!isValidHex(hex.q, hex.r)) continue;
     const unitOnHex = units.find(
       u => u.position.q === hex.q && u.position.r === hex.r && u.hp > 0
     );
 
     if (unitOnHex) {
-      // Don't damage the caster
       if (unitOnHex.id === caster.id) continue;
 
       const damage = Math.max(1, spell.damage + Math.floor(Math.random() * 3) - 1);
@@ -323,7 +337,6 @@ export function castSpell(state: GameState, target: HexCoord): GameState {
         u.id === unitOnHex.id ? { ...u, hp: newHp } : u
       );
 
-      // Update grid
       const hexKeyStr = hexKey(hex);
       const cell = newGrid.get(hexKeyStr);
       if (cell) {
@@ -336,10 +349,8 @@ export function castSpell(state: GameState, target: HexCoord): GameState {
     }
   }
 
-  // Update caster in units array
   units = units.map(u => u.id === caster.id ? caster : u);
 
-  // Build message
   let message = `${spell.emoji} ${caster.name} кастует ${spell.name}!`;
   if (spell.aoe > 0) {
     message += ` Урон по области: ${totalDamage}.`;
@@ -350,7 +361,6 @@ export function castSpell(state: GameState, target: HexCoord): GameState {
     message += ` Уничтожены: ${killedNames.join(', ')}!`;
   }
 
-  // Check win condition
   const playerAlive = units.filter((u) => u.team === 'player' && u.hp > 0);
   const enemyAlive = units.filter((u) => u.team === 'enemy' && u.hp > 0);
 
@@ -405,7 +415,6 @@ export function cancelSpellSelection(state: GameState): GameState {
 
 export function endTurn(state: GameState): GameState {
   if (state.turn === 'player') {
-    // Reset enemy units, regen their mana, reduce cooldowns
     const units = state.units.map((u) => {
       if (u.team === 'enemy') {
         const newSpells = u.spells?.map(s => ({
@@ -435,7 +444,6 @@ export function endTurn(state: GameState): GameState {
       message: 'Ход противника...',
     };
   } else {
-    // Reset player units, regen mana, reduce cooldowns
     const units = state.units.map((u) => {
       if (u.team === 'player') {
         const newSpells = u.spells?.map(s => ({
@@ -468,23 +476,20 @@ export function endTurn(state: GameState): GameState {
   }
 }
 
-// Enemy AI spell casting
 function enemyTryCastSpell(
   enemy: Unit,
   units: Unit[],
-  grid: Map<string, HexCell>
-): { target: HexCoord; spell: Spell } | null {
+  _grid: Map<string, HexCell>
+): { target: HexCoord; spell: any } | null {
   if (!enemy.spells || enemy.type !== 'mage') return null;
 
   const players = units.filter(u => u.team === 'player' && u.hp > 0);
   if (players.length === 0) return null;
 
-  // Try each spell
   for (const spell of enemy.spells) {
     if (spell.currentCooldown > 0) continue;
     if ((enemy.mana ?? 0) < spell.manaCost) continue;
 
-    // Find best target
     let bestTarget: HexCoord | null = null;
     let bestScore = -1;
 
@@ -493,7 +498,6 @@ function enemyTryCastSpell(
       if (dist > spell.range) continue;
 
       if (spell.aoe > 0) {
-        // For AoE, count how many players would be hit
         const aoeHexes = getHexesInRadius(player.position, spell.aoe);
         let hits = 0;
         for (const hex of aoeHexes) {
@@ -507,7 +511,6 @@ function enemyTryCastSpell(
           bestTarget = player.position;
         }
       } else {
-        // Single target: prefer low HP targets
         const score = (player.maxHp - player.hp + 5) * 5 - dist;
         if (score > bestScore) {
           bestScore = score;
@@ -527,7 +530,7 @@ function enemyTryCastSpell(
 function applySpellDamage(
   state: GameState,
   caster: Unit,
-  spell: Spell,
+  spell: any,
   target: HexCoord
 ): GameState {
   const affectedHexes = spell.aoe > 0
@@ -538,6 +541,7 @@ function applySpellDamage(
   const newGrid = new Map(state.grid);
 
   for (const hex of affectedHexes) {
+    if (!isValidHex(hex.q, hex.r)) continue;
     const unitOnHex = units.find(
       u => u.position.q === hex.q && u.position.r === hex.r && u.hp > 0
     );
@@ -566,33 +570,29 @@ export function executeEnemyTurn(state: GameState): GameState {
   const enemies = currentState.units.filter(
     (u) => u.team === 'enemy' && u.hp > 0
   );
-  const players = currentState.units.filter(
-    (u) => u.team === 'player' && u.hp > 0
-  );
-
-  if (players.length === 0) return currentState;
 
   for (const enemy of enemies) {
     const currentUnit = currentState.units.find((u) => u.id === enemy.id)!;
     if (currentUnit.hp <= 0) continue;
 
+    const players = currentState.units.filter(u => u.team === 'player' && u.hp > 0);
+    if (players.length === 0) break;
+
     let closestPlayer = players
-      .filter(p => p.hp > 0)
       .sort((a, b) => hexDistance(currentUnit.position, a.position) - hexDistance(currentUnit.position, b.position))[0];
 
     if (!closestPlayer) continue;
 
-    // Try to cast spell first (if mage)
+    // Try to cast spell first
     if (currentUnit.type === 'mage') {
       const spellResult = enemyTryCastSpell(currentUnit, currentState.units, currentState.grid);
       if (spellResult) {
-        // Cast the spell
         const updatedCaster = {
           ...currentUnit,
           mana: (currentUnit.mana ?? 0) - spellResult.spell.manaCost,
           attacked: true,
           moved: true,
-          spells: currentUnit.spells?.map(s =>
+          spells: currentUnit.spells?.map((s: any) =>
             s.id === spellResult.spell.id ? { ...s, currentCooldown: s.cooldown } : s
           ),
         };
@@ -615,7 +615,7 @@ export function executeEnemyTurn(state: GameState): GameState {
       }
     }
 
-    // Regular attack logic
+    // Regular attack
     const attackRange = currentUnit.type === 'archer' ? 3 : currentUnit.type === 'mage' ? 2 : 1;
     const minDist = hexDistance(currentUnit.position, closestPlayer.position);
 
@@ -675,7 +675,6 @@ export function executeEnemyTurn(state: GameState): GameState {
           grid: newGrid,
         };
 
-        // Try to attack after moving
         const newDist = hexDistance(bestHex, closestPlayer.position);
         if (newDist <= attackRange) {
           const damage = Math.max(1, currentUnit.attack + Math.floor(Math.random() * 3) - 1);

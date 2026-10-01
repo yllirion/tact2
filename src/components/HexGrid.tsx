@@ -1,5 +1,5 @@
 import React from 'react';
-import { HexCell, Unit, HexCoord, TERRAIN_COLORS, Spell } from '../game/types';
+import { HexCell, Unit, HexCoord, TERRAIN_COLORS, TERRAIN_EMOJI, Spell, TerrainType } from '../game/types';
 import { hexToPixel, hexKey } from '../game/hexUtils';
 
 interface HexGridProps {
@@ -26,13 +26,9 @@ function getHexPoints(size: number): string {
   return points.join(' ');
 }
 
-function getTerrainEmoji(terrain: string): string {
-  switch (terrain) {
-    case 'forest': return '🌲';
-    case 'mountain': return '⛰️';
-    case 'water': return '🌊';
-    default: return '';
-  }
+// Проверяем, является ли местность "тёмной" (для контраста эмодзи)
+function isDarkTerrain(terrain: TerrainType): boolean {
+  return terrain === 'deep' || terrain === 'cliffs' || terrain === 'buildings';
 }
 
 const HexGrid: React.FC<HexGridProps> = ({
@@ -62,14 +58,13 @@ const HexGrid: React.FC<HexGridProps> = ({
   const padding = hexSize;
   const viewBox = `${minX - padding} ${minY - padding} ${maxX - minX + padding * 2} ${maxY - minY + padding * 2}`;
 
-  // Check if spell effect is still showing (within 800ms)
   const showEffect = lastSpellEffect && (Date.now() - lastSpellEffect.timestamp < 800);
 
   return (
     <svg
       viewBox={viewBox}
-      className="w-full h-full max-h-[70vh]"
-      style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))' }}
+      className="w-full h-full max-h-[75vh]"
+      style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))' }}
     >
       {Array.from(cells.values()).map((cell) => {
         const { x, y } = hexToPixel(cell.coord, hexSize);
@@ -84,7 +79,7 @@ const HexGrid: React.FC<HexGridProps> = ({
         );
 
         let fillColor = TERRAIN_COLORS[cell.terrain];
-        let strokeColor = '#555';
+        let strokeColor = '#333';
         let strokeWidth = 1;
 
         if (isInEffect) {
@@ -104,21 +99,25 @@ const HexGrid: React.FC<HexGridProps> = ({
           if (selectedSpell?.id === 'lightning') {
             strokeColor = '#a855f7';
             strokeWidth = 2.5;
-            fillColor = cell.terrain === 'water' ? '#6a60d9' : '#c084fc';
+            // Слегка осветлим базовый цвет
+            fillColor = cell.terrain === 'deep' ? '#4a60d9' : '#c084fc';
           } else {
             strokeColor = '#f97316';
             strokeWidth = 2.5;
-            fillColor = cell.terrain === 'water' ? '#d97a4a' : '#fb923c';
+            fillColor = '#fb923c';
           }
         } else if (isAttackable) {
           strokeColor = '#ff4444';
           strokeWidth = 3;
-          fillColor = cell.terrain === 'water' ? '#4a60d9' : '#ff6b6b';
+          fillColor = '#ff6b6b';
         } else if (isReachable) {
           strokeColor = '#44ff44';
           strokeWidth = 2;
-          fillColor = cell.terrain === 'water' ? '#4ab0d9' : '#90d070';
+          // Слегка осветлим базовый цвет
+          fillColor = cell.terrain === 'deep' ? '#4ab0d9' : '#c8d870';
         }
+
+        const terrainEmoji = TERRAIN_EMOJI[cell.terrain];
 
         return (
           <g
@@ -136,37 +135,24 @@ const HexGrid: React.FC<HexGridProps> = ({
             />
             {/* Spell effect overlay */}
             {isInEffect && (
-              <>
-                {lastSpellEffect!.type === 'lightning' ? (
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={hexSize * 0.8}
-                    className="pointer-events-none select-none animate-pulse"
-                  >
-                    ⚡
-                  </text>
-                ) : (
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={hexSize * 0.8}
-                    className="pointer-events-none select-none animate-pulse"
-                  >
-                    💥
-                  </text>
-                )}
-              </>
+              <text
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={hexSize * 0.8}
+                className="pointer-events-none select-none animate-pulse"
+              >
+                {lastSpellEffect!.type === 'lightning' ? '⚡' : '💥'}
+              </text>
             )}
             {/* Terrain decoration */}
-            {!isInEffect && (cell.terrain === 'forest' || cell.terrain === 'mountain' || cell.terrain === 'water') && !unitOnCell && (
+            {!isInEffect && terrainEmoji && !unitOnCell && (
               <text
                 textAnchor="middle"
                 dominantBaseline="central"
                 fontSize={hexSize * 0.5}
                 className="pointer-events-none select-none"
               >
-                {getTerrainEmoji(cell.terrain)}
+                {terrainEmoji}
               </text>
             )}
             {/* Unit */}
@@ -174,7 +160,7 @@ const HexGrid: React.FC<HexGridProps> = ({
               <>
                 <circle
                   r={hexSize * 0.55}
-                  fill={unitOnCell.team === 'player' ? 'rgba(59, 130, 246, 0.7)' : 'rgba(239, 68, 68, 0.7)'}
+                  fill={unitOnCell.team === 'player' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(239, 68, 68, 0.8)'}
                   stroke={unitOnCell.team === 'player' ? '#1d4ed8' : '#991b1b'}
                   strokeWidth={2}
                 />

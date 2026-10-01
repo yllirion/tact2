@@ -1,6 +1,6 @@
 export interface HexCoord {
-  q: number;
-  r: number;
+  q: number; // column
+  r: number; // row
 }
 
 export interface Spell {
@@ -34,9 +34,19 @@ export interface Unit {
   spells?: Spell[];
 }
 
+export type TerrainType =
+  | 'plain'        // Обычные — хаки
+  | 'forest'       // Лес — зелёный
+  | 'shallow'      // Мелководье — голубой
+  | 'deep'         // Глубоководье — синий
+  | 'stones'       // Камни — серый
+  | 'cliffs'       // Скалы — чёрный
+  | 'fire'         // Огонь — красный
+  | 'buildings';   // Здания — тёмно-серый
+
 export interface HexCell {
   coord: HexCoord;
-  terrain: 'plain' | 'forest' | 'mountain' | 'water';
+  terrain: TerrainType;
   unit?: Unit;
 }
 
@@ -57,16 +67,48 @@ export interface GameState {
   lastSpellEffect: { hexes: HexCoord[]; type: 'lightning' | 'fireball'; timestamp: number } | null;
 }
 
-export const TERRAIN_COLORS: Record<string, string> = {
-  plain: '#8fbc5a',
-  forest: '#2d7a3a',
-  mountain: '#8b7355',
-  water: '#4a90d9',
+export const TERRAIN_COLORS: Record<TerrainType, string> = {
+  plain: '#b5a642',      // хаки
+  forest: '#2d7a3a',     // зелёный
+  shallow: '#7ec8e3',    // голубой
+  deep: '#1a4d8f',       // синий
+  stones: '#808080',     // серый
+  cliffs: '#1a1a1a',     // чёрный
+  fire: '#cc2200',       // красный
+  buildings: '#3d3d3d',  // тёмно-серый
 };
 
-export const TERRAIN_MOVE_COST: Record<string, number> = {
+export const TERRAIN_EMOJI: Record<TerrainType, string> = {
+  plain: '',
+  forest: '🌲',
+  shallow: '💧',
+  deep: '🌊',
+  stones: '🪨',
+  cliffs: '⛰️',
+  fire: '🔥',
+  buildings: '🏠',
+};
+
+// Стоимость перемещения (99 = непроходимо)
+export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
   plain: 1,
   forest: 2,
-  mountain: 3,
-  water: 99,
+  shallow: 2,
+  deep: 99,
+  stones: 2,
+  cliffs: 99,
+  fire: 99,
+  buildings: 1,
+};
+
+// Бонус защиты (снижение входящего урона)
+export const TERRAIN_DEFENSE: Record<TerrainType, number> = {
+  plain: 0,
+  forest: 1,
+  shallow: 0,
+  deep: 0,
+  stones: 1,
+  cliffs: 0,
+  fire: 0,
+  buildings: 2,
 };
